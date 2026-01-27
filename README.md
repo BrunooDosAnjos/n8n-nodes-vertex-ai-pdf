@@ -1,4 +1,14 @@
-# n8n-nodes-vertex-ai
+## Fork notice
+
+This is a fork of pokabook/n8n-nodes-vertex-ai.
+
+Added:
+- PDF support in multimodal (binary, URL, base64)
+
+NPM:
+- @brunodosanjos/n8n-nodes-vertex-ai-pdf
+
+# n8n-nodes-vertex-ai=pdf
 
 [English](#english) | [한국어](#한국어)
 
