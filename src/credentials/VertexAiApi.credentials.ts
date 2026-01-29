@@ -18,7 +18,8 @@ export class VertexAiApi implements ICredentialType {
 			name: 'region',
 			type: 'options',
 			options: [
-				{ name: 'us-central1 (Iowa) - 추천', value: 'us-central1' },
+				{ name: 'us-central1 (Iowa) – Recommended', value: 'us-central1' },
+				{ name: 'southamerica-east1 (São Paulo)', value: 'southamerica-east1' },
 				{ name: 'us-east1 (South Carolina)', value: 'us-east1' },
 				{ name: 'us-east4 (Northern Virginia)', value: 'us-east4' },
 				{ name: 'us-west1 (Oregon)', value: 'us-west1' },
@@ -30,7 +31,8 @@ export class VertexAiApi implements ICredentialType {
 			],
 			default: 'us-central1',
 			required: true,
-			description: 'Vertex AI 리전. 최신 모델은 us-central1에서 가장 먼저 지원됩니다.',
+			description:
+				'Vertex AI region used for request processing. Note: not all Gemini models are available in all regions. Preview models use the global endpoint automatically.',
 		},
 		{
 			displayName: 'Service Account Key (JSON)',
