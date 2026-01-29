@@ -65,8 +65,8 @@ export class VertexAI implements INodeType {
 					{
 						name: 'Multimodal',
 						value: 'multimodal',
-						description: 'Process text and images together',
-						action: 'Process text and images together',
+						description: 'Process text and files together',
+						action: 'Process text and files together',
 					},
 				],
 				default: 'generateText',
