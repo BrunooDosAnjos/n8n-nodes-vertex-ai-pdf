@@ -23,6 +23,56 @@ interface ChatMessage {
 	content: string;
 }
 
+function concatTextFromResponse(resp: any): string {
+	const parts = resp?.candidates?.[0]?.content?.parts || [];
+	return parts.map((p: any) => p?.text ?? '').join('').trim();
+}
+
+function splitCsv(value: string): string[] {
+	return value
+		.split(',')
+		.map((v) => v.trim())
+		.filter((v) => v.length > 0);
+}
+
+function extractJsonString(text: string): string {
+	const trimmed = (text ?? '').trim();
+
+	// Remove ```json ... ```
+	const fenceMatch = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+	if (fenceMatch?.[1]) return fenceMatch[1].trim();
+
+	// Tenta objeto
+	const firstObj = trimmed.indexOf('{');
+	const lastObj = trimmed.lastIndexOf('}');
+	if (firstObj >= 0 && lastObj > firstObj) {
+		return trimmed.slice(firstObj, lastObj + 1);
+	}
+
+	// Tenta array
+	const firstArr = trimmed.indexOf('[');
+	const lastArr = trimmed.lastIndexOf(']');
+	if (firstArr >= 0 && lastArr > firstArr) {
+		return trimmed.slice(firstArr, lastArr + 1);
+	}
+
+	return trimmed;
+}
+
+function tryParseJson(text: string): any | null {
+	try {
+		return JSON.parse(extractJsonString(text));
+	} catch {
+		return null;
+	}
+}
+
+function coerceJsonSchema(value: unknown): any | null {
+	if (value && typeof value === 'object') return value;
+	if (typeof value === 'string' && value.trim()) return JSON.parse(value);
+	return null;
+}
+
 export class VertexAI implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Vertex AI',
@@ -148,6 +198,43 @@ export class VertexAI implements INodeType {
 					},
 				],
 				description: 'The conversation messages',
+			},
+			// Evidence
+			{
+				displayName: 'Include Evidence',
+				name: 'includeEvidence',
+				type: 'boolean',
+				default: false,
+				description: 'Return each field as { value, evidence } with literal proof from the document',
+				displayOptions: {
+					show: {
+						responseFormat: ['application/json'],
+						schemaMode: ['simple'],
+					},
+				},
+			},
+			//Confidence
+			{
+				displayName: 'Include Confidence',
+				name: 'includeConfidence',
+				type: 'boolean',
+				default: false,
+				description: 'Add confidence (0.0 to 1.0) for each extracted field',
+				displayOptions: {
+					show: {
+						responseFormat: ['application/json'],
+						schemaMode: ['simple'],
+						includeEvidence: [true],
+					},
+				},
+			},
+			//Full OCR
+			{
+				displayName: 'Include Full Text (OCR)',
+				name: 'includeFullText',
+				type: 'boolean',
+				default: false,
+				description: 'Include the full extracted text as metadata (not part of the structured result)',
 			},
 			// Multimodal
 			{
@@ -561,97 +648,282 @@ export class VertexAI implements INodeType {
 				}
 
 				// Add structured output config
+				// if (responseFormat && responseFormat !== 'text/plain') {
+				// 	generationConfig.responseMimeType = responseFormat;
+
+				// 	if (schemaMode === 'simple') {
+				// 		// Simple mode: Build schema from UI inputs
+				// 		if (responseFormat === 'text/x.enum') {
+				// 			// Enum mode
+				// 			if (enumValues) {
+				// 				const enumArray = enumValues.split(',').map((v) => v.trim()).filter((v) => v);
+				// 				if (enumArray.length > 0) {
+				// 					generationConfig.responseSchema = {
+				// 						type: 'STRING',
+				// 						enum: enumArray,
+				// 					};
+				// 				}
+				// 			}
+				// 		} else if (responseFormat === 'application/json') {
+				// 			// JSON Object mode
+				// 			const schemaProps = schemaProperties?.properties || [];
+				// 			if (schemaProps.length > 0) {
+				// 				const properties: Record<string, Record<string, unknown>> = {};
+				// 				const required: string[] = [];
+
+				// 				for (const prop of schemaProps) {
+				// 					if (!prop.name) continue;
+
+				// 					let propSchema: Record<string, unknown> = {};
+
+				// 					// Handle different types
+				// 					if (prop.type === 'array_string') {
+				// 						propSchema = { type: 'ARRAY', items: { type: 'STRING' } };
+				// 					} else if (prop.type === 'array_number') {
+				// 						propSchema = { type: 'ARRAY', items: { type: 'NUMBER' } };
+				// 					} else {
+				// 						propSchema = { type: prop.type.toUpperCase() };
+				// 					}
+
+				// 					// Add description if provided
+				// 					if (prop.description) {
+				// 						propSchema.description = prop.description;
+				// 					}
+
+				// 					// Add nullable if true
+				// 					if (prop.nullable) {
+				// 						propSchema.nullable = true;
+				// 					}
+
+				// 					// Add enum values for string type
+				// 					if (prop.type === 'string' && prop.enumValues) {
+				// 						const enumArray = prop.enumValues.split(',').map((v) => v.trim()).filter((v) => v);
+				// 						if (enumArray.length > 0) {
+				// 							propSchema.enum = enumArray;
+				// 						}
+				// 					}
+
+				// 					properties[prop.name] = propSchema;
+
+				// 					if (prop.required) {
+				// 						required.push(prop.name);
+				// 					}
+				// 				}
+
+				// 				generationConfig.responseSchema = {
+				// 					type: 'OBJECT',
+				// 					properties,
+				// 					...(required.length > 0 && { required }),
+				// 				};
+				// 			}
+				// 		}
+				// 	} else {
+				// 		// Advanced mode: Use raw JSON schema
+				// 		if (responseSchema) {
+				// 			try {
+				// 				generationConfig.responseSchema = JSON.parse(responseSchema);
+				// 			} catch {
+				// 				throw new NodeOperationError(
+				// 					this.getNode(),
+				// 					'Invalid Response Schema JSON. Please provide a valid JSON schema.',
+				// 					{ itemIndex: i },
+				// 				);
+				// 			}
+				// 		}
+				// 	}
+				// }
+
+				// ===== Structured Output (REAL) + Evidence Mode =====
 				if (responseFormat && responseFormat !== 'text/plain') {
 					generationConfig.responseMimeType = responseFormat;
 
+					const requiresSchema =
+						responseFormat === 'application/json' || responseFormat === 'text/x.enum';
+
+					const includeEvidence = this.getNodeParameter('includeEvidence', i, false) as boolean;
+					const includeConfidence = this.getNodeParameter('includeConfidence', i, false) as boolean;
+					const includeFullText = this.getNodeParameter('includeFullText', i, false) as boolean;
+
+
 					if (schemaMode === 'simple') {
-						// Simple mode: Build schema from UI inputs
+						// ===== ENUM =====
 						if (responseFormat === 'text/x.enum') {
-							// Enum mode
-							if (enumValues) {
-								const enumArray = enumValues.split(',').map((v) => v.trim()).filter((v) => v);
-								if (enumArray.length > 0) {
-									generationConfig.responseSchema = {
-										type: 'STRING',
-										enum: enumArray,
-									};
-								}
-							}
-						} else if (responseFormat === 'application/json') {
-							// JSON Object mode
-							const schemaProps = schemaProperties?.properties || [];
-							if (schemaProps.length > 0) {
-								const properties: Record<string, Record<string, unknown>> = {};
-								const required: string[] = [];
-
-								for (const prop of schemaProps) {
-									if (!prop.name) continue;
-
-									let propSchema: Record<string, unknown> = {};
-
-									// Handle different types
-									if (prop.type === 'array_string') {
-										propSchema = { type: 'ARRAY', items: { type: 'STRING' } };
-									} else if (prop.type === 'array_number') {
-										propSchema = { type: 'ARRAY', items: { type: 'NUMBER' } };
-									} else {
-										propSchema = { type: prop.type.toUpperCase() };
-									}
-
-									// Add description if provided
-									if (prop.description) {
-										propSchema.description = prop.description;
-									}
-
-									// Add nullable if true
-									if (prop.nullable) {
-										propSchema.nullable = true;
-									}
-
-									// Add enum values for string type
-									if (prop.type === 'string' && prop.enumValues) {
-										const enumArray = prop.enumValues.split(',').map((v) => v.trim()).filter((v) => v);
-										if (enumArray.length > 0) {
-											propSchema.enum = enumArray;
-										}
-									}
-
-									properties[prop.name] = propSchema;
-
-									if (prop.required) {
-										required.push(prop.name);
-									}
-								}
-
-								generationConfig.responseSchema = {
-									type: 'OBJECT',
-									properties,
-									...(required.length > 0 && { required }),
-								};
-							}
-						}
-					} else {
-						// Advanced mode: Use raw JSON schema
-						if (responseSchema) {
-							try {
-								generationConfig.responseSchema = JSON.parse(responseSchema);
-							} catch {
+							const enumArray = splitCsv(enumValues);
+							if (!enumArray.length) {
 								throw new NodeOperationError(
 									this.getNode(),
-									'Invalid Response Schema JSON. Please provide a valid JSON schema.',
+									'Enum Values is required when Response Format is Enum.',
 									{ itemIndex: i },
 								);
 							}
+
+							generationConfig.responseSchema = {
+								type: 'STRING',
+								enum: enumArray,
+							};
 						}
+
+						// ===== JSON =====
+						if (responseFormat === 'application/json') {
+							const schemaProps = schemaProperties?.properties || [];
+							if (!schemaProps.length) {
+								throw new NodeOperationError(
+									this.getNode(),
+									'Schema Properties is required when Response Format is JSON.',
+									{ itemIndex: i },
+								);
+							}
+
+							const properties: Record<string, any> = {};
+							const required: string[] = [];
+
+							for (const prop of schemaProps) {
+								if (!prop.name) continue;
+
+								let baseSchema: any;
+
+								if (prop.type === 'array_string') {
+									baseSchema = { type: 'ARRAY', items: { type: 'STRING' } };
+								} else if (prop.type === 'array_number') {
+									baseSchema = { type: 'ARRAY', items: { type: 'NUMBER' } };
+								} else {
+									baseSchema = { type: prop.type.toUpperCase() };
+								}
+
+								if (prop.description) baseSchema.description = prop.description;
+								if (prop.nullable) baseSchema.nullable = true;
+
+								if (prop.type === 'string' && prop.enumValues) {
+									const enumArray = splitCsv(prop.enumValues);
+									if (enumArray.length) baseSchema.enum = enumArray;
+								}
+
+								if (includeEvidence) {
+									const wrappedProps: Record<string, any> = {
+										value: { ...baseSchema, nullable: true },
+										evidence: {
+											type: 'STRING',
+											nullable: true,
+											description:
+												'Literal excerpt copied from the document/OCR that includes surrounding context proving the value.',
+										},
+									};
+
+									const wrappedRequired = ['value', 'evidence'];
+
+									if (includeConfidence) {
+										wrappedProps.confidence = {
+											type: 'NUMBER',
+											nullable: true,
+											description: 'Confidence from 0.0 to 1.0 about the extraction correctness',
+										};
+										wrappedRequired.push('confidence');
+									}
+
+									properties[prop.name] = {
+										type: 'OBJECT',
+										properties: wrappedProps,
+										required: wrappedRequired,
+									};
+								} else {
+									properties[prop.name] = baseSchema;
+								}
+
+								if (prop.required) required.push(prop.name);
+							}
+
+							// Optional meta full text
+							if (includeFullText) {
+								properties._meta = {
+									type: 'OBJECT',
+									properties: {
+										fullText: {
+											type: 'STRING',
+											nullable: true,
+											description: 'Full extracted text from the document (may be truncated).',
+										},
+										fullTextTruncated: {
+											type: 'BOOLEAN',
+											nullable: true,
+											description: 'True if fullText was truncated due to size limits.',
+										},
+									},
+									required: ['fullText'],
+								};
+							}
+
+							generationConfig.responseSchema = {
+								type: 'OBJECT',
+								properties,
+								...(required.length ? { required } : {}),
+							};
+						}
+
+					} else {
+						// ===== Advanced (JSON Schema) =====
+						const schema = coerceJsonSchema(responseSchema);
+
+						if (requiresSchema && !schema) {
+							throw new NodeOperationError(
+								this.getNode(),
+								'Response Schema (JSON) is required in Advanced mode when Response Format is JSON or Enum.',
+								{ itemIndex: i },
+							);
+						}
+
+						if (schema) generationConfig.responseSchema = schema;
 					}
 				}
 
+
 				// Get generative model with configuration
+				// const generativeModel = vertexAI.getGenerativeModel({
+				// 	model,
+				// 	generationConfig,
+				// 	systemInstruction: options.systemInstruction
+				// 		? { role: 'system', parts: [{ text: options.systemInstruction }] }
+				// 		: undefined,
+				// });
+
+				const includeEvidence = this.getNodeParameter('includeEvidence', i, false) as boolean;
+				const includeConfidence = this.getNodeParameter('includeConfidence', i, false) as boolean;
+				const includeFullText = this.getNodeParameter('includeFullText', i, false) as boolean;
+
+				const systemParts: string[] = [];
+				if (options.systemInstruction) systemParts.push(options.systemInstruction);
+
+				if (includeEvidence) {
+					systemParts.push(
+						'IMPORTANT (Evidence Mode):',
+						'- For each field, always return both "value" and "evidence".',
+						'- "evidence" must be a LITERAL excerpt copied from the document/OCR and should include surrounding context (e.g., labels like "CPF:", nearby words).',
+						'- Prefer evidence length 20-120 chars when possible; evidence should contain the value as a substring when applicable.',
+						'- If you cannot find clear contextual evidence, return null for BOTH value and evidence.',
+					);
+					if (includeConfidence) {
+						systemParts.push(
+							'- Also return "confidence" (0.0 to 1.0) for each field.',
+							'- 0.9-1.0: clear label + value. 0.6-0.8: present but noisy. 0.1-0.5: uncertain. If very uncertain, return nulls.',
+						);
+					}
+				}
+
+				if (includeFullText) {
+					systemParts.push(
+					'If the output schema contains "_meta.fullText":',
+					'- Fill it with the full extracted text from the document.',
+					'- Do not add analysis or summaries.',
+					'- If the text is very long, truncate to the most complete text possible and set "_meta.fullTextTruncated" = true.',
+					);
+
+					systemParts.push(`- Hard limit: fullText must be <= 3000 characters.`);
+				}
+
 				const generativeModel = vertexAI.getGenerativeModel({
 					model,
 					generationConfig,
-					systemInstruction: options.systemInstruction
-						? { role: 'system', parts: [{ text: options.systemInstruction }] }
+					systemInstruction: systemParts.length
+						? { role: 'system', parts: [{ text: systemParts.join('\n') }] }
 						: undefined,
 				});
 
@@ -743,17 +1015,25 @@ export class VertexAI implements INodeType {
 				const result = await Promise.race([generatePromise, timeoutPromise]);
 				const response = result.response;
 
-				const generatedText =
-					response?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+				// const generatedText =
+				// 	response?.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
-				// Parse JSON response if structured output is enabled
-				let parsedJson = null;
+				// // Parse JSON response if structured output is enabled
+				// let parsedJson = null;
+				// if (responseFormat === 'application/json' && generatedText) {
+				// 	try {
+				// 		parsedJson = JSON.parse(generatedText);
+				// 	} catch {
+				// 		// If parsing fails, keep parsedJson as null
+				// 	}
+				// }
+
+				const parts = response?.candidates?.[0]?.content?.parts || [];
+				const generatedText = parts.map((p: any) => p?.text ?? '').join('').trim();
+				
+				let parsedJson: any = null;
 				if (responseFormat === 'application/json' && generatedText) {
-					try {
-						parsedJson = JSON.parse(generatedText);
-					} catch {
-						// If parsing fails, keep parsedJson as null
-					}
+					parsedJson = tryParseJson(generatedText);
 				}
 
 				returnData.push({
