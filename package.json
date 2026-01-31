@@ -33,7 +33,10 @@
     "dev": "nodemon -L --watch src --ext ts,json --exec \"npm run build:ts && docker restart n8n\"",
     "format": "prettier --write .",
     "lint": "eslint . --ext .ts",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "release:patch": "npm version patch && git push --follow-tags && npm publish --access public",
+    "release:minor": "npm version minor && git push --follow-tags && npm publish --access public",
+    "release:major": "npm version major && git push --follow-tags && npm publish --access public"
   },
   "files": [
     "dist"
