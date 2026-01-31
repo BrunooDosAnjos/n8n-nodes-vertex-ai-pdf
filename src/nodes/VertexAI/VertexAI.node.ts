@@ -42,14 +42,14 @@ function extractJsonString(text: string): string {
 	const fenceMatch = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
 	if (fenceMatch?.[1]) return fenceMatch[1].trim();
 
-	// Tenta objeto
+	// Try object
 	const firstObj = trimmed.indexOf('{');
 	const lastObj = trimmed.lastIndexOf('}');
 	if (firstObj >= 0 && lastObj > firstObj) {
 		return trimmed.slice(firstObj, lastObj + 1);
 	}
 
-	// Tenta array
+	// Try array
 	const firstArr = trimmed.indexOf('[');
 	const lastArr = trimmed.lastIndexOf(']');
 	if (firstArr >= 0 && lastArr > firstArr) {
@@ -127,7 +127,7 @@ export class VertexAI implements INodeType {
 				type: 'options',
 				options: [
 					{ name: 'Gemini 3 Pro (Preview)', value: 'gemini-3-pro-preview' },
-          { name: 'Gemini 3 Flash (Preview)', value: 'gemini-3-flash-preview' },
+					{ name: 'Gemini 3 Flash (Preview)', value: 'gemini-3-flash-preview' },
 					{ name: 'Gemini 2.5 Pro', value: 'gemini-2.5-pro' },
 					{ name: 'Gemini 2.5 Flash', value: 'gemini-2.5-flash' },
 					{ name: 'Gemini 2.5 Flash Lite', value: 'gemini-2.5-flash-lite' },
@@ -139,6 +139,7 @@ export class VertexAI implements INodeType {
 				default: 'gemini-2.5-flash',
 				description: 'The Gemini model to use',
 			},
+
 			// Generate Text
 			{
 				displayName: 'Prompt',
@@ -156,6 +157,7 @@ export class VertexAI implements INodeType {
 				},
 				description: 'The text prompt to send to the model',
 			},
+
 			// Chat
 			{
 				displayName: 'Messages',
@@ -199,6 +201,7 @@ export class VertexAI implements INodeType {
 				],
 				description: 'The conversation messages',
 			},
+
 			// Evidence
 			{
 				displayName: 'Include Evidence',
@@ -213,7 +216,8 @@ export class VertexAI implements INodeType {
 					},
 				},
 			},
-			//Confidence
+
+			// Confidence
 			{
 				displayName: 'Include Confidence',
 				name: 'includeConfidence',
@@ -228,14 +232,16 @@ export class VertexAI implements INodeType {
 					},
 				},
 			},
-			//Full OCR
+
+			// Full Text
 			{
-				displayName: 'Include Full Text (OCR)',
+				displayName: 'Include Full Text',
 				name: 'includeFullText',
 				type: 'boolean',
 				default: false,
 				description: 'Include the full extracted text as metadata (not part of the structured result)',
 			},
+
 			// Multimodal
 			{
 				displayName: 'Text',
@@ -250,7 +256,7 @@ export class VertexAI implements INodeType {
 						operation: ['multimodal'],
 					},
 				},
-				description: 'The text to send with the image',
+				description: 'The text to send with the file',
 			},
 			{
 				displayName: 'File Source',
@@ -268,47 +274,44 @@ export class VertexAI implements INodeType {
 					},
 				},
 			},
-
 			{
-			  displayName: 'URL MIME Type',
-			  name: 'urlMimeType',
-			  type: 'options',
-			  options: [
-			    { name: 'image/jpeg', value: 'image/jpeg' },
-			    { name: 'image/png', value: 'image/png' },
-			    { name: 'application/pdf', value: 'application/pdf' },
-			    { name: 'text/plain', value: 'text/plain' },
-			  ],
-			  default: 'application/pdf',
-			  displayOptions: {
-			    show: {
-			      operation: ['multimodal'],
-			      imageSource: ['url'],
-			    },
-			  },
-			  description: 'MIME type do arquivo apontado pela URL',
+				displayName: 'URL MIME Type',
+				name: 'urlMimeType',
+				type: 'options',
+				options: [
+					{ name: 'image/jpeg', value: 'image/jpeg' },
+					{ name: 'image/png', value: 'image/png' },
+					{ name: 'application/pdf', value: 'application/pdf' },
+					{ name: 'text/plain', value: 'text/plain' },
+				],
+				default: 'application/pdf',
+				displayOptions: {
+					show: {
+						operation: ['multimodal'],
+						imageSource: ['url'],
+					},
+				},
+				description: 'MIME type for the file referenced by the URL',
 			},
-
 			{
-			  displayName: 'Base64 MIME Type',
-			  name: 'base64MimeType',
-			  type: 'options',
-			  options: [
-			    { name: 'image/jpeg', value: 'image/jpeg' },
-			    { name: 'image/png', value: 'image/png' },
-			    { name: 'application/pdf', value: 'application/pdf' },
-			    { name: 'text/plain', value: 'text/plain' },
-			  ],
-			  default: 'application/pdf',
-			  displayOptions: {
-			    show: {
-			      operation: ['multimodal'],
-			      imageSource: ['base64'],
-			    },
-			  },
-			  description: 'MIME type do conteúdo base64',
+				displayName: 'Base64 MIME Type',
+				name: 'base64MimeType',
+				type: 'options',
+				options: [
+					{ name: 'image/jpeg', value: 'image/jpeg' },
+					{ name: 'image/png', value: 'image/png' },
+					{ name: 'application/pdf', value: 'application/pdf' },
+					{ name: 'text/plain', value: 'text/plain' },
+				],
+				default: 'application/pdf',
+				displayOptions: {
+					show: {
+						operation: ['multimodal'],
+						imageSource: ['base64'],
+					},
+				},
+				description: 'MIME type for the provided base64 content',
 			},
-
 			{
 				displayName: 'Binary Property',
 				name: 'binaryProperty',
@@ -320,7 +323,7 @@ export class VertexAI implements INodeType {
 						imageSource: ['binary'],
 					},
 				},
-				description: 'Name of the binary property containing the image',
+				description: 'Name of the binary property containing the file',
 			},
 			{
 				displayName: 'File URL',
@@ -333,6 +336,7 @@ export class VertexAI implements INodeType {
 						imageSource: ['url'],
 					},
 				},
+				description: 'Direct URL to the file',
 			},
 			{
 				displayName: 'Base64 File',
@@ -345,8 +349,9 @@ export class VertexAI implements INodeType {
 						imageSource: ['base64'],
 					},
 				},
-				description: 'Base64 encoded image data (without data:image prefix)',
+				description: 'Base64 encoded file data (without data:* prefix)',
 			},
+
 			// Options
 			{
 				displayName: 'Options',
@@ -401,7 +406,7 @@ export class VertexAI implements INodeType {
 							rows: 3,
 						},
 						default: '',
-						description: 'System instruction to guide the model behavior',
+						description: 'System instruction to guide model behavior',
 					},
 					{
 						displayName: 'Thinking Level (Gemini 3 only)',
@@ -413,18 +418,21 @@ export class VertexAI implements INodeType {
 							{ name: 'High', value: 'high' },
 						],
 						default: 'none',
-						description: 'Controls the amount of internal reasoning for Gemini 3 models. Use "low" or "high" to enable thinking.',
+						description:
+							'Controls internal reasoning for Gemini 3 models. Use "low" or "high" to enable thinking.',
 					},
 					{
 						displayName: 'Timeout (ms)',
 						name: 'timeout',
 						type: 'number',
 						default: 60000,
-						description: 'API 요청 타임아웃 (밀리초). 기본값 60000ms = 60초. 긴 응답이 예상되면 값을 늘려주세요.',
+						description:
+							'API request timeout in milliseconds. Default is 60000ms (60 seconds). Increase if you expect long responses.',
 					},
 				],
 			},
-			// Structured Output Section
+
+			// Structured Output
 			{
 				displayName: 'Response Format',
 				name: 'responseFormat',
@@ -435,7 +443,8 @@ export class VertexAI implements INodeType {
 					{ name: 'Enum', value: 'text/x.enum' },
 				],
 				default: 'text/plain',
-				description: '응답 형식을 지정합니다. JSON 또는 Enum 선택 시 스키마 설정이 필요합니다.',
+				description:
+					'Select the response format. JSON or Enum requires schema configuration.',
 			},
 			{
 				displayName: 'Schema Mode',
@@ -451,9 +460,9 @@ export class VertexAI implements INodeType {
 						responseFormat: ['application/json', 'text/x.enum'],
 					},
 				},
-				description: '스키마 입력 방식을 선택합니다. Simple은 UI로 쉽게 설정, Advanced는 JSON 스키마 직접 입력.',
+				description:
+					'Select how to provide a schema. Simple uses UI fields; Advanced uses raw JSON schema.',
 			},
-			// Simple Mode - Enum Values
 			{
 				displayName: 'Enum Values',
 				name: 'enumValues',
@@ -466,9 +475,8 @@ export class VertexAI implements INodeType {
 						schemaMode: ['simple'],
 					},
 				},
-				description: '콤마로 구분된 Enum 값들을 입력하세요. 예: positive, negative, neutral',
+				description: 'Comma-separated enum values, e.g. positive, negative, neutral',
 			},
-			// Simple Mode - Object Properties
 			{
 				displayName: 'Schema Properties',
 				name: 'schemaProperties',
@@ -483,7 +491,8 @@ export class VertexAI implements INodeType {
 						schemaMode: ['simple'],
 					},
 				},
-				description: 'JSON 응답의 속성들을 정의합니다. "Add Property" 버튼을 클릭하여 원하는 필드를 추가하세요.',
+				description:
+					'Define JSON response properties. Click "Add Property" to add fields.',
 				options: [
 					{
 						name: 'properties',
@@ -495,59 +504,59 @@ export class VertexAI implements INodeType {
 								type: 'string',
 								default: '',
 								placeholder: 'name, email, age, ...',
-								description: '속성 이름 (영문 권장)',
+								description: 'Property name (English recommended)',
 							},
 							{
 								displayName: 'Type',
 								name: 'type',
 								type: 'options',
 								options: [
-									{ name: 'String (텍스트)', value: 'string' },
-									{ name: 'Number (소수점 숫자)', value: 'number' },
-									{ name: 'Integer (정수)', value: 'integer' },
-									{ name: 'Boolean (참/거짓)', value: 'boolean' },
-									{ name: 'Array of Strings (텍스트 배열)', value: 'array_string' },
-									{ name: 'Array of Numbers (숫자 배열)', value: 'array_number' },
-									{ name: 'Object (중첩 객체 - Advanced 모드 권장)', value: 'object' },
+									{ name: 'String', value: 'string' },
+									{ name: 'Number', value: 'number' },
+									{ name: 'Integer', value: 'integer' },
+									{ name: 'Boolean', value: 'boolean' },
+									{ name: 'Array of Strings', value: 'array_string' },
+									{ name: 'Array of Numbers', value: 'array_number' },
+									{ name: 'Object (Nested; prefer Advanced mode)', value: 'object' },
 								],
 								default: 'string',
-								description: '이 속성에 들어갈 값의 타입',
+								description: 'The type of this property',
 							},
 							{
 								displayName: 'Description',
 								name: 'description',
 								type: 'string',
 								default: '',
-								placeholder: '이 필드에 대한 설명...',
-								description: '속성 설명 (AI가 더 정확한 값을 생성하는 데 도움이 됩니다)',
+								placeholder: 'Describe this field...',
+								description: 'Field description to help the model',
 							},
 							{
-								displayName: 'Required (필수 여부)',
+								displayName: 'Required',
 								name: 'required',
 								type: 'boolean',
 								default: true,
-								description: '이 속성이 반드시 포함되어야 하는지 여부',
+								description: 'Whether this property must be included',
 							},
 							{
-								displayName: 'Nullable (null 허용)',
+								displayName: 'Nullable',
 								name: 'nullable',
 								type: 'boolean',
 								default: false,
-								description: '값을 찾을 수 없을 때 null을 허용할지 여부',
+								description: 'Whether null is allowed when a value is not found',
 							},
 							{
-								displayName: 'Allowed Values (허용 값 목록)',
+								displayName: 'Allowed Values',
 								name: 'enumValues',
 								type: 'string',
 								default: '',
 								placeholder: 'option1, option2, option3',
-								description: '이 속성에 허용되는 값들만 지정 (String 타입에서만 사용, 콤마로 구분). 비워두면 모든 값 허용',
+								description:
+									'Allowed values (string type only). Comma-separated. Empty means any value allowed.',
 							},
 						],
 					},
 				],
 			},
-			// Advanced Mode - Raw JSON Schema
 			{
 				displayName: 'Response Schema (JSON)',
 				name: 'responseSchema',
@@ -559,7 +568,8 @@ export class VertexAI implements INodeType {
 						schemaMode: ['advanced'],
 					},
 				},
-				description: 'JSON 스키마 형식으로 응답 구조를 정의합니다. 예: {"type": "OBJECT", "properties": {"name": {"type": "STRING"}}, "required": ["name"]}',
+				description:
+					'Define the output schema as JSON. Example: {"type":"OBJECT","properties":{"name":{"type":"STRING"}},"required":["name"]}',
 			},
 		],
 	};
@@ -588,7 +598,7 @@ export class VertexAI implements INodeType {
 				const operation = this.getNodeParameter('operation', i) as string;
 				const model = this.getNodeParameter('model', i) as string;
 
-				// Get structured output parameters (outside of options)
+				// Structured output parameters
 				const responseFormat = this.getNodeParameter('responseFormat', i, 'text/plain') as string;
 				const schemaMode = this.getNodeParameter('schemaMode', i, 'simple') as string;
 				const enumValues = this.getNodeParameter('enumValues', i, '') as string;
@@ -617,12 +627,11 @@ export class VertexAI implements INodeType {
 					timeout?: number;
 				};
 
-				// Preview models (like gemini-3-pro-preview) require global region
+				// Preview models require global location
 				const isPreviewModel = model.includes('preview');
 				const isGemini3 = model.includes('gemini-3');
 				const location = isPreviewModel ? 'global' : region;
 
-				// Initialize Vertex AI client with appropriate location and endpoint
 				const vertexAI = new VertexAIClient({
 					project: projectId,
 					location,
@@ -632,7 +641,7 @@ export class VertexAI implements INodeType {
 					},
 				});
 
-				// Build generation config
+				// Generation config
 				const generationConfig: Record<string, unknown> = {
 					maxOutputTokens: options.maxOutputTokens || 2048,
 					temperature: options.temperature ?? 1,
@@ -640,100 +649,14 @@ export class VertexAI implements INodeType {
 					topK: options.topK ?? 40,
 				};
 
-				// Add thinking config for Gemini 3 models
+				// Thinking config for Gemini 3
 				if (isGemini3 && options.thinkingLevel && options.thinkingLevel !== 'none') {
 					generationConfig.thinkingConfig = {
 						thinkingLevel: options.thinkingLevel.toUpperCase(),
 					};
 				}
 
-				// Add structured output config
-				// if (responseFormat && responseFormat !== 'text/plain') {
-				// 	generationConfig.responseMimeType = responseFormat;
-
-				// 	if (schemaMode === 'simple') {
-				// 		// Simple mode: Build schema from UI inputs
-				// 		if (responseFormat === 'text/x.enum') {
-				// 			// Enum mode
-				// 			if (enumValues) {
-				// 				const enumArray = enumValues.split(',').map((v) => v.trim()).filter((v) => v);
-				// 				if (enumArray.length > 0) {
-				// 					generationConfig.responseSchema = {
-				// 						type: 'STRING',
-				// 						enum: enumArray,
-				// 					};
-				// 				}
-				// 			}
-				// 		} else if (responseFormat === 'application/json') {
-				// 			// JSON Object mode
-				// 			const schemaProps = schemaProperties?.properties || [];
-				// 			if (schemaProps.length > 0) {
-				// 				const properties: Record<string, Record<string, unknown>> = {};
-				// 				const required: string[] = [];
-
-				// 				for (const prop of schemaProps) {
-				// 					if (!prop.name) continue;
-
-				// 					let propSchema: Record<string, unknown> = {};
-
-				// 					// Handle different types
-				// 					if (prop.type === 'array_string') {
-				// 						propSchema = { type: 'ARRAY', items: { type: 'STRING' } };
-				// 					} else if (prop.type === 'array_number') {
-				// 						propSchema = { type: 'ARRAY', items: { type: 'NUMBER' } };
-				// 					} else {
-				// 						propSchema = { type: prop.type.toUpperCase() };
-				// 					}
-
-				// 					// Add description if provided
-				// 					if (prop.description) {
-				// 						propSchema.description = prop.description;
-				// 					}
-
-				// 					// Add nullable if true
-				// 					if (prop.nullable) {
-				// 						propSchema.nullable = true;
-				// 					}
-
-				// 					// Add enum values for string type
-				// 					if (prop.type === 'string' && prop.enumValues) {
-				// 						const enumArray = prop.enumValues.split(',').map((v) => v.trim()).filter((v) => v);
-				// 						if (enumArray.length > 0) {
-				// 							propSchema.enum = enumArray;
-				// 						}
-				// 					}
-
-				// 					properties[prop.name] = propSchema;
-
-				// 					if (prop.required) {
-				// 						required.push(prop.name);
-				// 					}
-				// 				}
-
-				// 				generationConfig.responseSchema = {
-				// 					type: 'OBJECT',
-				// 					properties,
-				// 					...(required.length > 0 && { required }),
-				// 				};
-				// 			}
-				// 		}
-				// 	} else {
-				// 		// Advanced mode: Use raw JSON schema
-				// 		if (responseSchema) {
-				// 			try {
-				// 				generationConfig.responseSchema = JSON.parse(responseSchema);
-				// 			} catch {
-				// 				throw new NodeOperationError(
-				// 					this.getNode(),
-				// 					'Invalid Response Schema JSON. Please provide a valid JSON schema.',
-				// 					{ itemIndex: i },
-				// 				);
-				// 			}
-				// 		}
-				// 	}
-				// }
-
-				// ===== Structured Output (REAL) + Evidence Mode =====
+				// ===== Structured Output + Evidence Mode =====
 				if (responseFormat && responseFormat !== 'text/plain') {
 					generationConfig.responseMimeType = responseFormat;
 
@@ -744,9 +667,8 @@ export class VertexAI implements INodeType {
 					const includeConfidence = this.getNodeParameter('includeConfidence', i, false) as boolean;
 					const includeFullText = this.getNodeParameter('includeFullText', i, false) as boolean;
 
-
 					if (schemaMode === 'simple') {
-						// ===== ENUM =====
+						// Enum
 						if (responseFormat === 'text/x.enum') {
 							const enumArray = splitCsv(enumValues);
 							if (!enumArray.length) {
@@ -763,7 +685,7 @@ export class VertexAI implements INodeType {
 							};
 						}
 
-						// ===== JSON =====
+						// JSON
 						if (responseFormat === 'application/json') {
 							const schemaProps = schemaProperties?.properties || [];
 							if (!schemaProps.length) {
@@ -805,7 +727,7 @@ export class VertexAI implements INodeType {
 											type: 'STRING',
 											nullable: true,
 											description:
-												'Literal excerpt copied from the document/OCR that includes surrounding context proving the value.',
+												'Literal excerpt copied from the document/OCR including surrounding context proving the value.',
 										},
 									};
 
@@ -815,7 +737,7 @@ export class VertexAI implements INodeType {
 										wrappedProps.confidence = {
 											type: 'NUMBER',
 											nullable: true,
-											description: 'Confidence from 0.0 to 1.0 about the extraction correctness',
+											description: 'Confidence from 0.0 to 1.0 about extraction correctness',
 										};
 										wrappedRequired.push('confidence');
 									}
@@ -832,7 +754,7 @@ export class VertexAI implements INodeType {
 								if (prop.required) required.push(prop.name);
 							}
 
-							// Optional meta full text
+							// Optional metadata with full extracted text
 							if (includeFullText) {
 								properties._meta = {
 									type: 'OBJECT',
@@ -858,9 +780,8 @@ export class VertexAI implements INodeType {
 								...(required.length ? { required } : {}),
 							};
 						}
-
 					} else {
-						// ===== Advanced (JSON Schema) =====
+						// Advanced JSON schema
 						const schema = coerceJsonSchema(responseSchema);
 
 						if (requiresSchema && !schema) {
@@ -875,16 +796,6 @@ export class VertexAI implements INodeType {
 					}
 				}
 
-
-				// Get generative model with configuration
-				// const generativeModel = vertexAI.getGenerativeModel({
-				// 	model,
-				// 	generationConfig,
-				// 	systemInstruction: options.systemInstruction
-				// 		? { role: 'system', parts: [{ text: options.systemInstruction }] }
-				// 		: undefined,
-				// });
-
 				const includeEvidence = this.getNodeParameter('includeEvidence', i, false) as boolean;
 				const includeConfidence = this.getNodeParameter('includeConfidence', i, false) as boolean;
 				const includeFullText = this.getNodeParameter('includeFullText', i, false) as boolean;
@@ -897,9 +808,10 @@ export class VertexAI implements INodeType {
 						'IMPORTANT (Evidence Mode):',
 						'- For each field, always return both "value" and "evidence".',
 						'- "evidence" must be a LITERAL excerpt copied from the document/OCR and should include surrounding context (e.g., labels like "CPF:", nearby words).',
-						'- Prefer evidence length 20-120 chars when possible; evidence should contain the value as a substring when applicable.',
+						'- Prefer evidence length 20-120 characters when possible; evidence should contain the value as a substring when applicable.',
 						'- If you cannot find clear contextual evidence, return null for BOTH value and evidence.',
 					);
+
 					if (includeConfidence) {
 						systemParts.push(
 							'- Also return "confidence" (0.0 to 1.0) for each field.',
@@ -910,13 +822,13 @@ export class VertexAI implements INodeType {
 
 				if (includeFullText) {
 					systemParts.push(
-					'If the output schema contains "_meta.fullText":',
-					'- Fill it with the full extracted text from the document.',
-					'- Do not add analysis or summaries.',
-					'- If the text is very long, truncate to the most complete text possible and set "_meta.fullTextTruncated" = true.',
+						'If the output schema contains "_meta.fullText":',
+						'- Fill it with the full extracted text from the document.',
+						'- Do not add analysis or summaries.',
+						'- If the text is very long, truncate to the most complete text possible and set "_meta.fullTextTruncated" = true.',
 					);
 
-					systemParts.push(`- Hard limit: fullText must be <= 3000 characters.`);
+					systemParts.push('- Hard limit: fullText must be <= 3000 characters.');
 				}
 
 				const generativeModel = vertexAI.getGenerativeModel({
@@ -942,7 +854,6 @@ export class VertexAI implements INodeType {
 						parts: [{ text: msg.content }],
 					}));
 				} else {
-
 					const text = this.getNodeParameter('text', i, '') as string;
 					const imageSource = this.getNodeParameter('imageSource', i) as string;
 
@@ -959,14 +870,9 @@ export class VertexAI implements INodeType {
 								data: buffer.toString('base64'),
 							},
 						};
-
 					} else if (imageSource === 'url') {
 						const fileUrl = this.getNodeParameter('imageUrl', i) as string;
-						const urlMimeType = this.getNodeParameter(
-							'urlMimeType',
-							i,
-							'application/pdf',
-						) as string;
+						const urlMimeType = this.getNodeParameter('urlMimeType', i, 'application/pdf') as string;
 
 						filePart = {
 							fileData: {
@@ -974,14 +880,9 @@ export class VertexAI implements INodeType {
 								mimeType: urlMimeType,
 							},
 						};
-
 					} else {
 						const base64 = this.getNodeParameter('base64Image', i) as string;
-						const base64MimeType = this.getNodeParameter(
-							'base64MimeType',
-							i,
-							'application/pdf',
-						) as string;
+						const base64MimeType = this.getNodeParameter('base64MimeType', i, 'application/pdf') as string;
 
 						filePart = {
 							inlineData: {
@@ -994,43 +895,25 @@ export class VertexAI implements INodeType {
 					contents = [
 						{
 							role: 'user',
-							parts: [
-								{ text: text || 'Describe this file' },
-								filePart,
-							],
+							parts: [{ text: text || 'Describe this file' }, filePart],
 						},
 					];
 				}
 
-				// Generate content using the SDK with timeout
+				// Generate with timeout
 				const timeoutMs = options.timeout || 60000;
 				const generatePromise = generativeModel.generateContent({ contents });
 
 				const timeoutPromise = new Promise<never>((_, reject) => {
-					setTimeout(() => {
-						reject(new Error(`Request timed out after ${timeoutMs}ms`));
-					}, timeoutMs);
+					setTimeout(() => reject(new Error(`Request timed out after ${timeoutMs}ms`)), timeoutMs);
 				});
 
 				const result = await Promise.race([generatePromise, timeoutPromise]);
 				const response = result.response;
 
-				// const generatedText =
-				// 	response?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-
-				// // Parse JSON response if structured output is enabled
-				// let parsedJson = null;
-				// if (responseFormat === 'application/json' && generatedText) {
-				// 	try {
-				// 		parsedJson = JSON.parse(generatedText);
-				// 	} catch {
-				// 		// If parsing fails, keep parsedJson as null
-				// 	}
-				// }
-
 				const parts = response?.candidates?.[0]?.content?.parts || [];
 				const generatedText = parts.map((p: any) => p?.text ?? '').join('').trim();
-				
+
 				let parsedJson: any = null;
 				if (responseFormat === 'application/json' && generatedText) {
 					parsedJson = tryParseJson(generatedText);
@@ -1055,11 +938,10 @@ export class VertexAI implements INodeType {
 					});
 					continue;
 				}
-				throw new NodeOperationError(
-					this.getNode(),
-					`Vertex AI Error: ${(error as Error).message}`,
-					{ itemIndex: i },
-				);
+
+				throw new NodeOperationError(this.getNode(), `Vertex AI Error: ${(error as Error).message}`, {
+					itemIndex: i,
+				});
 			}
 		}
 

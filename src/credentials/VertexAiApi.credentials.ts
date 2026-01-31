@@ -46,8 +46,7 @@ export class VertexAiApi implements ICredentialType {
 			required: true,
 			placeholder: '{"type": "service_account", "project_id": "...", ...}',
 			description:
-				'Google Cloud Console에서 다운로드한 서비스 계정 키 JSON 파일의 전체 내용을 복사하여 붙여넣기 하세요',
+				'Paste the full JSON content of the service account key file downloaded from Google Cloud Console.',
 		},
 	];
 }
-
