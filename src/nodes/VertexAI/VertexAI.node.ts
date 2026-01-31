@@ -73,6 +73,288 @@ function coerceJsonSchema(value: unknown): any | null {
 	return null;
 }
 
+interface ClassificationParams {
+	enableClassification: boolean;
+	classificationRequirements?: {
+		expectedType?: string;
+		requiredFields?: string;
+		classificationInstructions?: string;
+		failOnTypeMismatch?: boolean;
+	};
+	detectSignatures: boolean;
+}
+
+function getComparisonInstruction(comparisonType: string): string {
+	switch (comparisonType) {
+		case 'exact':
+			return 'Must match exactly (case-sensitive, character-by-character)';
+		case 'normalized':
+			return 'Normalize both values (remove accents, lowercase, trim spaces) before comparing';
+		case 'numeric':
+			return 'Extract only numbers from both values (remove dots, dashes, slashes) before comparing';
+		case 'date':
+			return 'Parse as dates (YYYY-MM-DD format) and compare chronologically';
+		case 'semantic':
+			return 'Determine if values have the same SEMANTIC MEANING even if written differently (abbreviations, synonyms, variations). Provide reasoning.';
+		default:
+			return 'Compare as strings';
+	}
+}
+
+function buildClassificationSystemInstructions(params: ClassificationParams): string {
+	const { enableClassification, classificationRequirements, detectSignatures } = params;
+
+	const systemParts: string[] = [];
+
+	if (enableClassification && classificationRequirements?.expectedType) {
+		systemParts.push(
+			'',
+			'DOCUMENT CLASSIFICATION:',
+			`- Expected document type: "${classificationRequirements.expectedType}"`,
+			`- Required fields for classification: ${classificationRequirements.requiredFields || 'none specified'}`,
+		);
+
+		if (classificationRequirements.classificationInstructions) {
+			systemParts.push(
+				'- Classification rules and indicators:',
+				...classificationRequirements.classificationInstructions
+					.split('\n')
+					.map((line: string) => `  ${line.trim()}`)
+					.filter((line: string) => line.trim()),
+			);
+		}
+
+		systemParts.push(
+			'- Determine the actual document type based on content and structure',
+			'- Set classification.detectedType to what you detect',
+			`- Set classification.expectedType to "${classificationRequirements.expectedType}"`,
+			'- Set classification.matches to true/false',
+			'- Set classification.confidence (0.0-1.0)',
+			'- IMPORTANT: Fill classification.reasoning IN PORTUGUESE with a clear explanation of:',
+			'  - Key indicators found that support this classification (headers, formats, specific fields)',
+			'  - Why it matches or does not match the expected type',
+			'  - Any missing elements or discrepancies',
+			'- ALL text outputs must be in Portuguese (Brasil)',
+			'',
+		);
+
+		if (classificationRequirements.failOnTypeMismatch) {
+			systemParts.push("- IMPORTANT: If types don't match, this is a CRITICAL ERROR", '');
+		}
+	}
+
+	if (detectSignatures) {
+		systemParts.push(
+			'',
+			'SIGNATURE DETECTION:',
+			'- Carefully examine the document for signatures (handwritten, digital stamps, or signature images)',
+			'- For each signature found:',
+			'  - Set detected = true',
+			'  - Look for text near the signature and extract:',
+			'    - Signer name (usually printed below or above signature)',
+			'    - Signer role/title (e.g., "Médico Responsável", "Diretor Técnico")',
+			'    - Professional ID (e.g., "CRM 12345-SP", "CREA 67890-RJ", "OAB 11111-MG")',
+			'  - Determine location (top-left, top-right, center, bottom-left, bottom-right)',
+			'  - Classify type (handwritten, digital, stamp)',
+			'- If no signature found, return empty array',
+			'',
+		);
+	}
+
+	return systemParts.join('\n');
+}
+
+function buildClassificationSchema(extractionSchema: any): any {
+	return {
+		type: 'OBJECT',
+		properties: {
+			classification: {
+				type: 'OBJECT',
+				nullable: true,
+				properties: {
+					detectedType: { type: 'STRING', nullable: true },
+					expectedType: { type: 'STRING', nullable: true },
+					matches: { type: 'BOOLEAN', nullable: true },
+					confidence: { type: 'NUMBER', nullable: true },
+					reasoning: {
+						type: 'STRING',
+						nullable: true,
+						description: 'Explanation of why the document was classified as this type, including key indicators and characteristics found or missing',
+					},
+				},
+			},
+			extraction: extractionSchema,
+		},
+		required: ['extraction'],
+	};
+}
+
+function addSignatureDetectionToSchema(schema: any): any {
+	return {
+		...schema,
+		properties: {
+			...schema.properties,
+			signatures: {
+				type: 'ARRAY',
+				items: {
+					type: 'OBJECT',
+					properties: {
+						detected: {
+							type: 'BOOLEAN',
+							description: 'Whether a signature was detected in this location',
+						},
+						signerName: {
+							type: 'STRING',
+							nullable: true,
+							description: 'Name of person who signed (if visible near signature)',
+						},
+						signerRole: {
+							type: 'STRING',
+							nullable: true,
+							description: 'Role/title of signer (if visible near signature)',
+						},
+						signerIdentification: {
+							type: 'STRING',
+							nullable: true,
+							description: 'Professional ID like CRM, CREA, OAB (if visible near signature)',
+						},
+						signatureLocation: {
+							type: 'STRING',
+							nullable: true,
+							description: 'Location in document: top-left, top-right, center, bottom-left, bottom-right',
+						},
+						signatureType: {
+							type: 'STRING',
+							nullable: true,
+							description: 'Type: handwritten, digital, stamp',
+						},
+					},
+				},
+			},
+		},
+	};
+}
+
+function buildValidateDocumentPrompt(
+	extractedData: any,
+	referenceData: Array<any>,
+	customRules: Array<any>,
+): string {
+	const prompt: string[] = [];
+
+	prompt.push('You are validating extracted document data against reference data and custom rules.');
+	prompt.push('');
+	prompt.push('EXTRACTED DATA:');
+	prompt.push(JSON.stringify(extractedData, null, 2));
+	prompt.push('');
+
+	if (referenceData.length > 0) {
+		prompt.push('FIELD COMPARISONS:');
+		for (const ref of referenceData) {
+			const extractedValue =
+				extractedData[ref.fieldName]?.value || extractedData[ref.fieldName] || null;
+			prompt.push(`- Field "${ref.fieldName}":`);
+			prompt.push(`  - Extracted value: "${extractedValue}"`);
+			prompt.push(`  - Reference value: "${ref.expectedValue}"`);
+			prompt.push(
+				`  - Comparison type: ${getComparisonInstruction(ref.comparisonType)}`,
+			);
+			prompt.push(
+				`  - If mismatch: error message = "${ref.errorMessage || `${ref.fieldName} mismatch`}"`,
+			);
+		}
+		prompt.push('');
+	}
+
+	if (customRules.length > 0) {
+		prompt.push('CUSTOM VALIDATION RULES:');
+		for (const rule of customRules) {
+			const fieldValue =
+				extractedData[rule.fieldName]?.value || extractedData[rule.fieldName] || null;
+			prompt.push(`- Field "${rule.fieldName}":`);
+			prompt.push(`  - Value: "${fieldValue}"`);
+			prompt.push(`  - Rule: ${rule.ruleDescription}`);
+			prompt.push(`  - If fails: "${rule.errorMessage}" (severity: ${rule.severity})`);
+		}
+		prompt.push('');
+	}
+
+	prompt.push('INSTRUCTIONS:');
+	prompt.push('- Perform all comparisons according to comparison types specified');
+	prompt.push('- Evaluate all custom rules based on their descriptions');
+	prompt.push(
+		'- For semantic comparisons, determine if values have the same MEANING even if written differently',
+	);
+	prompt.push(
+		'  - Consider abbreviations (Dr. = Doutor, Eng. = Engenheiro, CEO = Chief Executive Officer)',
+	);
+	prompt.push('  - Consider synonyms and common variations');
+	prompt.push('  - Provide reasoning for semantic comparisons IN PORTUGUESE');
+	prompt.push('- Set isValid = false if ANY error-severity validation fails');
+	prompt.push('- Set isValid = true if all error-severity validations pass (warnings are OK)');
+	prompt.push('- Populate comparisons[] with all field comparison results');
+	prompt.push('- Populate customValidations[] with all rule evaluation results');
+	prompt.push('- Populate errors[] with all error messages from failed validations IN PORTUGUESE');
+	prompt.push('- Populate warnings[] with all warning messages IN PORTUGUESE');
+	prompt.push('- ALL text outputs must be in Portuguese (Brasil)');
+
+	return prompt.join('\n');
+}
+
+function buildValidateDocumentSchema(): any {
+	return {
+		type: 'OBJECT',
+		properties: {
+			isValid: {
+				type: 'BOOLEAN',
+				description:
+					'Overall validation result (false if any error-severity validation failed)',
+			},
+			comparisons: {
+				type: 'ARRAY',
+				items: {
+					type: 'OBJECT',
+					properties: {
+						field: { type: 'STRING' },
+						extractedValue: { type: 'STRING', nullable: true },
+						referenceValue: { type: 'STRING', nullable: true },
+						matches: { type: 'BOOLEAN' },
+						comparisonType: { type: 'STRING' },
+						reasoning: {
+							type: 'STRING',
+							nullable: true,
+							description: 'Explanation for semantic comparisons',
+						},
+						errorMessage: { type: 'STRING', nullable: true },
+					},
+				},
+			},
+			customValidations: {
+				type: 'ARRAY',
+				items: {
+					type: 'OBJECT',
+					properties: {
+						field: { type: 'STRING' },
+						ruleDescription: { type: 'STRING' },
+						passed: { type: 'BOOLEAN' },
+						severity: { type: 'STRING' },
+						errorMessage: { type: 'STRING', nullable: true },
+					},
+				},
+			},
+			errors: {
+				type: 'ARRAY',
+				items: { type: 'STRING' },
+			},
+			warnings: {
+				type: 'ARRAY',
+				items: { type: 'STRING' },
+			},
+		},
+		required: ['isValid', 'comparisons', 'customValidations', 'errors', 'warnings'],
+	};
+}
+
 export class VertexAI implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Vertex AI',
@@ -117,6 +399,12 @@ export class VertexAI implements INodeType {
 						value: 'multimodal',
 						description: 'Process text and files together',
 						action: 'Process text and files together',
+					},
+					{
+						name: 'Validate Document',
+						value: 'validateDocument',
+						description: 'Compare extracted data with reference data and validate rules',
+						action: 'Validate document data',
 					},
 				],
 				default: 'generateText',
@@ -350,6 +638,226 @@ export class VertexAI implements INodeType {
 					},
 				},
 				description: 'Base64 encoded file data (without data:* prefix)',
+			},
+
+		// Document Classification
+		{
+			displayName: 'Enable Document Classification',
+			name: 'enableClassification',
+			type: 'boolean',
+			default: false,
+			displayOptions: {
+				show: {
+					operation: ['multimodal'],
+				},
+			},
+			description: 'Validate document type and extract data only if type matches expectations',
+		},
+		{
+			displayName: 'Classification Requirements',
+			name: 'classificationRequirements',
+			type: 'fixedCollection',
+			typeOptions: {
+				multipleValues: false,
+			},
+			default: {},
+			displayOptions: {
+				show: {
+					operation: ['multimodal'],
+					enableClassification: [true],
+				},
+			},
+			description: 'Define expected document type and required fields for classification',
+			options: [
+				{
+					name: 'requirements',
+					displayName: '',
+					values: [
+						{
+							displayName: 'Expected Document Type',
+							name: 'expectedType',
+							type: 'string',
+							default: '',
+							placeholder: 'CNH, RG, ASO, Certificate, etc',
+							description: 'Type of document expected (e.g., RG, CNH, ASO)',
+						},
+						{
+							displayName: 'Required Fields for Classification',
+							name: 'requiredFields',
+							type: 'string',
+							default: '',
+							placeholder: 'nome, rg, cpf, dataNascimento',
+							description: 'Comma-separated list of fields that MUST be present to classify as this type',
+						},
+						{
+							displayName: 'Classification Instructions',
+							name: 'classificationInstructions',
+							type: 'string',
+							typeOptions: {
+								rows: 3,
+							},
+							default: '',
+							placeholder: 'Must have "Receita Federal" header\nCPF must be in format ###.###.###-##\nMust show birth date',
+							description: 'Optional custom instructions on how to identify this document type. Describe key indicators, patterns, headers, or formatting requirements that distinguish this document.',
+						},
+						{
+							displayName: 'Fail if Type Mismatch',
+							name: 'failOnTypeMismatch',
+							type: 'boolean',
+							default: true,
+							description: 'Whether validation should fail if detected type differs from expected type',
+						},
+					],
+				},
+			],
+		},
+		{
+			displayName: 'Detect Signatures',
+			name: 'detectSignatures',
+			type: 'boolean',
+			default: false,
+			displayOptions: {
+				show: {
+					operation: ['multimodal'],
+				},
+			},
+			description: 'Detect signatures in the document and extract signer information (name, role, credentials, location)',
+		},
+
+			// Validate Document
+			{
+				displayName: 'Extracted Data',
+				name: 'extractedData',
+				type: 'json',
+				default: '={{ $json.extraction }}',
+				required: true,
+				displayOptions: {
+					show: {
+						operation: ['validateDocument'],
+					},
+				},
+				description: 'The extracted data to validate (usually from a previous extraction step)',
+			},
+			{
+				displayName: 'Reference Data',
+				name: 'referenceData',
+				type: 'fixedCollection',
+				typeOptions: {
+					multipleValues: true,
+				},
+				default: {},
+				displayOptions: {
+					show: {
+						operation: ['validateDocument'],
+					},
+				},
+				description: 'Field-by-field comparisons against expected reference values',
+				options: [
+					{
+						name: 'comparisons',
+						displayName: 'Comparison',
+						values: [
+							{
+								displayName: 'Field Name',
+								name: 'fieldName',
+								type: 'string',
+								default: '',
+								placeholder: 'cpf, name, birthDate, ...',
+								description: 'Name of the field to compare',
+							},
+							{
+								displayName: 'Expected Value',
+								name: 'expectedValue',
+								type: 'string',
+								default: '',
+								description: 'The reference value to compare against',
+							},
+							{
+								displayName: 'Comparison Type',
+								name: 'comparisonType',
+								type: 'options',
+								options: [
+									{ name: 'Exact Match', value: 'exact' },
+									{ name: 'Normalized (no accents, lowercase)', value: 'normalized' },
+									{ name: 'Numeric Only (ignore formatting)', value: 'numeric' },
+									{ name: 'Date Comparison', value: 'date' },
+									{ name: 'Semantic (same meaning)', value: 'semantic' },
+								],
+								default: 'exact',
+								description: 'How to compare the values',
+							},
+							{
+								displayName: 'Error Message',
+								name: 'errorMessage',
+								type: 'string',
+								default: '',
+								placeholder: 'CPF does not match expected value',
+								description: 'Custom error message if comparison fails',
+							},
+						],
+					},
+				],
+			},
+			{
+				displayName: 'Custom Validation Rules',
+				name: 'customValidationRules',
+				type: 'fixedCollection',
+				typeOptions: {
+					multipleValues: true,
+				},
+				default: {},
+				displayOptions: {
+					show: {
+						operation: ['validateDocument'],
+					},
+				},
+				description: 'Custom validation rules with natural language descriptions',
+				options: [
+					{
+						name: 'rules',
+						displayName: 'Rule',
+						values: [
+							{
+								displayName: 'Field Name',
+								name: 'fieldName',
+								type: 'string',
+								default: '',
+								placeholder: 'age, date, status, ...',
+								description: 'Name of the field to validate',
+							},
+							{
+								displayName: 'Rule Description',
+								name: 'ruleDescription',
+								type: 'string',
+								typeOptions: {
+									rows: 2,
+								},
+								default: '',
+								placeholder: 'Must be 18 or older, Date must be in the past, ...',
+								description: 'Natural language description of the validation rule',
+							},
+							{
+								displayName: 'Severity',
+								name: 'severity',
+								type: 'options',
+								options: [
+									{ name: 'Error', value: 'error' },
+									{ name: 'Warning', value: 'warning' },
+								],
+								default: 'error',
+								description: 'Whether rule failure is an error (fails validation) or warning (passes with note)',
+							},
+							{
+								displayName: 'Error Message',
+								name: 'errorMessage',
+								type: 'string',
+								default: '',
+								placeholder: 'Patient must be 18 or older',
+								description: 'Message to show if rule fails',
+							},
+						],
+					},
+				],
 			},
 
 			// Options
@@ -795,6 +1303,21 @@ export class VertexAI implements INodeType {
 						if (schema) generationConfig.responseSchema = schema;
 					}
 				}
+				// Apply classification wrapper if enabled (multimodal only)
+				if (operation === 'multimodal' && responseFormat === 'application/json' && generationConfig.responseSchema) {
+					const enableClassificationCheck = this.getNodeParameter('enableClassification', i, false) as boolean;
+
+					if (enableClassificationCheck) {
+						const extractionSchema = generationConfig.responseSchema;
+						generationConfig.responseSchema = buildClassificationSchema(extractionSchema);
+					}
+
+					// Apply signature detection if enabled
+					const detectSignaturesCheck = this.getNodeParameter('detectSignatures', i, false) as boolean;
+					if (detectSignaturesCheck) {
+						generationConfig.responseSchema = addSignatureDetectionToSchema(generationConfig.responseSchema);
+					}
+				}
 
 				const includeEvidence = this.getNodeParameter('includeEvidence', i, false) as boolean;
 				const includeConfidence = this.getNodeParameter('includeConfidence', i, false) as boolean;
@@ -830,6 +1353,26 @@ export class VertexAI implements INodeType {
 
 					systemParts.push('- Hard limit: fullText must be <= 3000 characters.');
 				}
+				// Add classification instructions if enabled
+				if (operation === 'multimodal') {
+					const enableClassificationCheck = this.getNodeParameter('enableClassification', i, false) as boolean;
+					const detectSignaturesCheck = this.getNodeParameter('detectSignatures', i, false) as boolean;
+
+					if (enableClassificationCheck || detectSignaturesCheck) {
+						const classificationRequirementsParam = this.getNodeParameter('classificationRequirements', i, {}) as any;
+						const classificationRequirements = classificationRequirementsParam?.requirements;
+
+						const classificationInstructions = buildClassificationSystemInstructions({
+							enableClassification: enableClassificationCheck,
+							classificationRequirements,
+							detectSignatures: detectSignaturesCheck,
+						});
+
+						if (classificationInstructions) {
+							systemParts.push(classificationInstructions);
+						}
+					}
+				}
 
 				const generativeModel = vertexAI.getGenerativeModel({
 					model,
@@ -838,6 +1381,75 @@ export class VertexAI implements INodeType {
 						? { role: 'system', parts: [{ text: systemParts.join('\n') }] }
 						: undefined,
 				});
+
+				// Handle validateDocument operation
+				if (operation === 'validateDocument') {
+					const extractedDataParam = this.getNodeParameter('extractedData', i) as any;
+					const extractedData = typeof extractedDataParam === 'string'
+						? JSON.parse(extractedDataParam)
+						: extractedDataParam;
+
+					const referenceDataParam = this.getNodeParameter('referenceData', i, {}) as {
+						comparisons?: Array<any>;
+					};
+					const referenceData = referenceDataParam.comparisons || [];
+
+					const customValidationRulesParam = this.getNodeParameter('customValidationRules', i, {}) as {
+						rules?: Array<any>;
+					};
+					const customValidationRules = customValidationRulesParam.rules || [];
+
+					// Build validation prompt
+					const validationPrompt = buildValidateDocumentPrompt(
+						extractedData,
+						referenceData,
+						customValidationRules,
+					);
+
+					// Build validation schema
+					const validationSchema = buildValidateDocumentSchema();
+
+					// Create a validation-specific model with low temperature
+					const validationModel = vertexAI.getGenerativeModel({
+						model,
+						generationConfig: {
+							maxOutputTokens: options.maxOutputTokens || 2048,
+							temperature: 0.1,
+							topP: 0.95,
+							topK: 40,
+							responseMimeType: 'application/json',
+							responseSchema: validationSchema,
+						},
+					});
+
+					// Generate validation result
+					const timeoutMs = options.timeout || 60000;
+					const validatePromise = validationModel.generateContent({
+						contents: [{ role: 'user', parts: [{ text: validationPrompt }] }],
+					});
+
+					const timeoutPromise = new Promise<never>((_, reject) => {
+						setTimeout(() => reject(new Error(`Request timed out after ${timeoutMs}ms`)), timeoutMs);
+					});
+
+					const validationResult = await Promise.race([validatePromise, timeoutPromise]);
+					const validationResponse = validationResult.response;
+
+					const validationText = concatTextFromResponse(validationResponse);
+					const validationJson = tryParseJson(validationText);
+
+					returnData.push({
+						json: {
+							validation: validationJson,
+							text: validationText,
+							model,
+							operation,
+							usage: validationResponse?.usageMetadata,
+						},
+					});
+
+					continue;
+				}
 
 				let contents: Content[];
 
@@ -919,16 +1531,24 @@ export class VertexAI implements INodeType {
 					parsedJson = tryParseJson(generatedText);
 				}
 
+				// When classification is enabled, spread parsed JSON fields directly
+				const enableClassificationCheck = operation === 'multimodal'
+					? this.getNodeParameter('enableClassification', i, false) as boolean
+					: false;
+
+				const outputJson: Record<string, any> = {
+					...(enableClassificationCheck && parsedJson !== null ? parsedJson : {}),
+					...(!enableClassificationCheck && parsedJson !== null ? { json: parsedJson } : {}),
+					text: generatedText,
+					model,
+					operation,
+					usage: response?.usageMetadata,
+					safetyRatings: response?.candidates?.[0]?.safetyRatings,
+					finishReason: response?.candidates?.[0]?.finishReason,
+				};
+
 				returnData.push({
-					json: {
-						text: generatedText,
-						...(parsedJson !== null && { json: parsedJson }),
-						model,
-						operation,
-						usage: response?.usageMetadata,
-						safetyRatings: response?.candidates?.[0]?.safetyRatings,
-						finishReason: response?.candidates?.[0]?.finishReason,
-					},
+					json: outputJson,
 				});
 			} catch (error) {
 				if (this.continueOnFail()) {
